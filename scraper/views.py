@@ -1,47 +1,19 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-import json
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+import json
 import time
 import os
-from bs4 import BeautifulSoup
-
-from .firecrawlscarpper import firecrawl_scrapper
 
 # Directory to save HTML files
 HTML_SAVE_DIR = "scraped_pages"
-
-
-@csrf_exempt
-@api_view(["POST"])
-def test(request, *args, **kwargs):
-    data = request.data
-    if data:
-        print(data)
-        return Response({"status": "success", "message": "User logged in successfully"})
-    return Response({"status": "error", "error": "Invalid request data"}, status=400)
-
-
-def save_page_html(page_source, filename):
-    """Save the page source to an HTML file."""
-    # Create the directory if it doesn't exist
-    if not os.path.exists(HTML_SAVE_DIR):
-        os.makedirs(HTML_SAVE_DIR)
-    file_path = os.path.join(HTML_SAVE_DIR, filename)
-    with open(file_path, "w", encoding="utf-8") as file:
-        file.write(page_source)
-    print(f"Saved HTML to {file_path}")
-
- # Find all unread conversations
-    # "msg-s-event-listitem__subject (subject may exist or not)"
-    # msg-s-event-listitem__body (last one latest message)
-
 
 @csrf_exempt
 @api_view(["POST"])
@@ -67,13 +39,17 @@ def scrape_messages(request):
             if not navigate_to_messages(driver):
                 return JsonResponse({"status": "error", "error": "Failed to load messages page"}, status=500)
 
-            # Scrape unread conversations
-            conversations = scrape_read_conversations(driver)
+            # Scroll to load all conversations
+            scroll_to_load_all_conversations(driver)
+
+            # Scrape all conversations
+            print("Scraping conversations...")
+            conversations = scrape_conversations(driver)
 
             # Close the browser
             driver.quit()
 
-            print(conversations)
+            print(f"Scraped {len(conversations)} conversations")
 
             # Return the scraped conversations
             return JsonResponse({"status": "success", "conversations": conversations})
@@ -83,15 +59,12 @@ def scrape_messages(request):
 
     return JsonResponse({"status": "error", "error": "Invalid request method"}, status=400)
 
-
 def configure_browser():
     """Configure and return a headless Chrome browser."""
     chrome_options = Options()
     chrome_options.add_argument("--headless")  # Run in headless mode
-    chrome_options.add_argument(
-        "--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     return webdriver.Chrome(options=chrome_options)
-
 
 def navigate_to_linkedin_and_set_cookies(driver, cookies):
     """Navigate to LinkedIn and set cookies. Return True if successful."""
@@ -109,8 +82,7 @@ def navigate_to_linkedin_and_set_cookies(driver, cookies):
                     })
                     print(f"Added cookie: {cookie['name']}")
                 except Exception as e:
-                    print(
-                        f"Failed to add cookie: {cookie['name']}. Error: {e}")
+                    print(f"Failed to add cookie: {cookie['name']}. Error: {e}")
             else:
                 print(f"Skipping invalid cookie: {cookie}")
 
@@ -119,7 +91,6 @@ def navigate_to_linkedin_and_set_cookies(driver, cookies):
         print(f"Failed to navigate to LinkedIn or set cookies. Error: {e}")
         return False
 
-
 def navigate_to_messages(driver):
     """Navigate to LinkedIn messages page. Return True if successful."""
     try:
@@ -127,22 +98,42 @@ def navigate_to_messages(driver):
 
         # Wait for messages to load
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, ".msg-conversations-container__conversations-list"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".msg-conversations-container__conversations-list"))
         )
         return True
     except Exception as e:
         print(f"Failed to load messages page. Error: {e}")
         return False
 
+def scroll_to_load_all_conversations(driver):
+    """Scroll down to load all conversations."""
+    try:
+        # Get the conversation list container
+        conversation_list = driver.find_element(By.CSS_SELECTOR, ".msg-conversations-container__conversations-list")
 
-def scrape_read_conversations(driver):
-    """Scrape unread conversations and return a list of conversations."""
+        # Scroll until no more conversations are loaded
+        last_height = driver.execute_script("return arguments[0].scrollHeight", conversation_list)
+        while True:
+            # Scroll down to the bottom of the conversation list
+            driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", conversation_list)
+            time.sleep(2)  # Wait for new conversations to load
+
+            # Calculate new scroll height
+            new_height = driver.execute_script("return arguments[0].scrollHeight", conversation_list)
+            if new_height == last_height:
+                break  # No more conversations to load
+            last_height = new_height
+
+        print("All conversations loaded.")
+    except Exception as e:
+        print(f"Failed to scroll and load conversations. Error: {e}")
+
+def scrape_conversations(driver):
+    """Scrape all conversations and return a list of conversations."""
     conversations = []
     try:
-        # Find all unread conversations
-        conversation_elements = driver.find_elements(
-            By.CSS_SELECTOR, ".msg-conversation-listitem")
+        # Find all conversation elements
+        conversation_elements = driver.find_elements(By.CSS_SELECTOR, ".msg-conversation-listitem")
         for index, element in enumerate(conversation_elements):
             try:
                 # Click on the conversation to load the thread
@@ -150,115 +141,62 @@ def scrape_read_conversations(driver):
                 time.sleep(2)  # Wait for the thread to load
 
                 # Save the conversation thread HTML
-                save_page_html(driver.page_source,
-                               f"conversation_{index + 1}.html")
+                save_page_html(driver.page_source, f"conversation_{index + 1}.html")
 
                 # Parse the page source with BeautifulSoup
                 soup = BeautifulSoup(driver.page_source, "html.parser")
 
                 # Extract conversation details
                 conversation = extract_conversation_details(soup)
+                print("con", conversation)
                 if conversation:
                     conversations.append(conversation)
-                    print(
-                        f"Scraped unread conversation {index + 1}/{len(conversation_elements)}: {conversation['username']}")
+                    print(f"Scraped conversation {index + 1}/{len(conversation_elements)}: {conversation['username']}")
 
             except Exception as e:
-                print(
-                    f"Failed to scrape unread conversation {index + 1}. Error: {e}")
+                print(f"Failed to scrape conversation {index + 1}. Error: {e}")
 
     except Exception as e:
-        print(f"Failed to find unread conversations. Error: {e}")
+        print(f"Failed to find conversations. Error: {e}")
 
     return conversations
 
-
 def extract_conversation_details(soup):
-    """Extract username, profile image, and latest message from the conversation thread."""
+    """Extract username, profile image, and messages from the conversation thread."""
     try:
-        # Get the username and profile image from the conversation header
-        header = soup.select_one(".msg-conversation-card__header")
-        if not header:
-            print("Conversation header not found.")
-            return None
+        # Get the username
+        username = soup.select_one(".msg-conversation-listitem__participant-names").text.strip()
 
-        username = header.select_one(
-            ".msg-conversation-listitem__participant-names")
-        if not username:
-            print("Username not found.")
-            return None
-        username = username.text.strip()
-
-        profile_image = header.select_one(
-            ".msg-conversation-card__profile-image")
-        if not profile_image:
-            print("Profile image not found.")
-            profile_image = None
-        else:
+        # Get the profile image URL
+        profile_image = soup.select_one(".msg-conversation-listitem__profile-image")
+        if profile_image:
             profile_image = profile_image["src"]
-
-        # Scrape the latest message in the thread
-        latest_message_element = soup.select_one(
-            ".msg-s-event-listitem:last-child")
-        if not latest_message_element:
-            print("Latest message not found.")
-            return None
-
-        # Extract sender username for the latest message
-        sender = latest_message_element.select_one(
-            ".msg-s-message-group__name")
-        if not sender:
-            print("Sender not found.")
-            sender = "Unknown"
         else:
-            sender = sender.text.strip()
+            profile_image = None
 
-        # Extract subject and body (if available)
-        subject = latest_message_element.select_one(
-            ".msg-s-event-listitem__subject")
-        body = latest_message_element.select_one(".msg-s-event-listitem__body")
-
-        # Combine subject and body into a single message
-        message = ""
-        if subject:
-            message += f"Subject: {subject.text.strip()}\n"
-        if body:
-            message += body.text.strip()
+        # Scrape messages in the thread
+        messages = []
+        message_elements = soup.select(".msg-s-event-listitem__body")
+        for msg_element in message_elements:
+            message = msg_element.text.strip()
+            messages.append(message)
 
         return {
             "username": username,
             "profile_image": profile_image,
-            "latest_message": {
-                "sender": sender,
-                "message": message,
-            },
+            "messages": messages,
         }
-
     except Exception as e:
         print(f"Failed to extract conversation details. Error: {e}")
         return None
-
 
 def save_page_html(page_source, filename):
     """Save the page source to an HTML file."""
     # Create the directory if it doesn't exist
     if not os.path.exists(HTML_SAVE_DIR):
         os.makedirs(HTML_SAVE_DIR)
+
     file_path = os.path.join(HTML_SAVE_DIR, filename)
     with open(file_path, "w", encoding="utf-8") as file:
         file.write(page_source)
     print(f"Saved HTML to {file_path}")
-
-
-# @api_view(["POST"])
-# def firecrawl_scrap(request, *args, **kwargs):
-#     data = json.loads(request.body)
-#     cookies = data.get("cookies", [])
-#     if not cookies:
-#         return JsonResponse({"status": "error", "error": "No cookies provided"}, status=400)
-
-#     scrape_status, crawl_status, map_result = firecrawl_scrapper(
-#         request, cookies)
-#     if scrape_status and crawl_status and map_result:
-#         return Response({"status": "success", "scrape_status": scrape_status, "crawl_status": crawl_status, "map_result": map_result})
-#     return Response({"status": "error", "error": "Invalid request data"}, status=400)
