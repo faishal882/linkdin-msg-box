@@ -163,12 +163,14 @@ def scrape_conversations(driver):
                 # # Save the conversation thread HTML
                 # save_page_html(driver.page_source,
                 #                f"conversation_{index + 1}.html")
+                thread_url = driver.current_url
+                print("Thread URL: ", thread_url)
 
                 # Parse the page source with BeautifulSoup
                 soup = BeautifulSoup(driver.page_source, "html.parser")
 
                 # Extract conversation details
-                conversation = extract_conversation_details(soup)
+                conversation = extract_conversation_details(soup, thread_url)
                 # print("con", conversation)
                 if conversation:
                     conversations.append(conversation)
@@ -184,12 +186,17 @@ def scrape_conversations(driver):
     return conversations
 
 
-def extract_conversation_details(soup):
+def extract_conversation_details(soup, thread_url):
     """Extract username, profile image, and messages from the conversation thread."""
     try:
         # Get the username
-        username = soup.select_one(
-            ".msg-conversation-listitem__participant-names").text.strip()
+        # username = soup.select_one(
+        #     ".msg-conversation-listitem__participant-names").text.strip()
+        username_element = soup.find("h2", {"id": "thread-detail-jump-target"})
+        if username_element:
+            username = username_element.text.strip()
+        else:
+            username = "Unknown"
 
         # Get the profile image URL
         # profile_image = soup.select_one(
@@ -208,6 +215,7 @@ def extract_conversation_details(soup):
 
         return {
             "username": username,
+            "thread_url": thread_url,
             "messages": messages,
         }
     except Exception as e:
