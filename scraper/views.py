@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 
+from .classify import classify_messages
 from .utils import (configure_browser,
                     navigate_to_linkedin_and_set_cookies,
                     navigate_to_messages,
@@ -13,24 +14,23 @@ from .utils import (configure_browser,
 
 @api_view(['POST'])
 @csrf_exempt
-def scrape_messages(request, *args, **kwargs):
+def scrape_and_classify_messages(request, *args, **kwargs):
     """
-    Handles the scraping of LinkedIn messages.
+    Handles the scraping and classification of LinkedIn messages.
 
     This view function accepts a POST request containing LinkedIn cookies,
-    configures a browser session, navigates to LinkedIn, sets the cookies,
-    and scrapes the user's LinkedIn messages.
+    scrapes the user's LinkedIn messages, and classifies them.
 
     Args:
         request (HttpRequest): The HTTP request object containing JSON data with LinkedIn cookies.
 
     Returns:
-        JsonResponse: A JSON response containing the status of the operation and the scraped conversations
-        or an error message if the operation fails.
+        JsonResponse: A JSON response containing the status of the operation, the scraped conversations,
+        and their classifications or an error message if the operation fails.
 
     Raises:
-        JsonResponse: If an exception occurs during the scraping process, a JSON response with the error message
-        and a 500 status code is returned.
+        JsonResponse: If an exception occurs during the scraping or classification process, a JSON response
+        with the error message and a 500 status code is returned.
     """
     if request.method == "POST":
         try:
@@ -66,8 +66,12 @@ def scrape_messages(request, *args, **kwargs):
 
             print(f"Scraped {len(conversations)} conversations")
 
-            # Return the scraped conversations
-            return JsonResponse({"status": "success", "conversations": conversations})
+            # Classify the conversations
+            classified_conversations = classify_messages(conversations)
+            print(classified_conversations)
+
+            # Return the scraped and classified conversations
+            return JsonResponse({"status": "success", "conversations": classified_conversations})
 
         except Exception as e:
             return JsonResponse({"status": "error", "error": str(e)}, status=500)
