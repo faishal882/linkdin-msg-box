@@ -1,4 +1,6 @@
+from dateutil import parser
 import time
+from datetime import datetime, timedelta
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -133,6 +135,37 @@ def extract_conversation_details(soup, thread_url):
         else:
             username = "Unknown"
 
+        # Extract profile URL
+        profile_link_element = soup.find(
+            "a", class_="msg-thread__link-to-profile")
+        if profile_link_element and "href" in profile_link_element.attrs:
+            profile_url = profile_link_element["href"]
+        else:
+            profile_url = "Not Found"
+
+        # extract last message time
+        try:
+            # time header
+            time_header_elements = soup.find_all(
+                "time", class_="msg-s-message-list__time-heading")
+            time_header = time_header_elements[-1].text.strip()
+            print("TH>>", time_header)
+            # time stamp
+            last_message_timestamp_elements = soup.find_all(
+                "time", class_="msg-s-message-group__timestamp")
+            last_message_timestamp = last_message_timestamp_elements[-1].text.strip(
+            )
+            print("S>>", last_message_timestamp)
+
+        except:
+            time_header = None
+            last_message_timestamp = None
+
+        # Combine time header and last message timestamp into a single timestamp
+        last_message_timestamp_combined = combine_time_header_and_timestamp(
+            time_header, last_message_timestamp
+        )
+        print(last_message_timestamp_combined)
         # extracts messages
         messages = []
         message_elements = soup.select(".msg-s-event-listitem__body")
@@ -142,9 +175,94 @@ def extract_conversation_details(soup, thread_url):
 
         return {
             "username": username,
+            "profile_url": profile_url,
             "thread_url": thread_url,
             "messages": messages,
+            "last_message_timestamp": last_message_timestamp_combined,
         }
     except Exception as e:
         print(f"Failed to extract conversation details. Error: {e}")
+        return None
+
+
+def combine_time_header_and_timestamp(time_header, last_message_timestamp):
+    """
+    Combine the time header (e.g. format, "Thursday", "Feb 6", "Nov 7, 2024") 
+    and last message timestamp (e.g., "1:37 PM") into a single datetime object.
+    Handles case insensitivity for month/day names and AM/PM designations.
+    """
+    try:
+        # Define current date and time
+        now = datetime.now()
+
+        # Normalize time_header to lowercase for consistency
+        time_header = time_header.strip().lower()
+
+        # Initialize the date variable
+        date = None
+
+        # Handle "Today" and "Yesterday"
+        if time_header == "today":
+            date = now.date()
+        elif time_header == "yesterday":
+            date = (now - timedelta(days=1)).date()
+
+        # Handle weekdays (e.g., "thursday")
+        elif time_header in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
+            days_map = {
+                "monday": 0,
+                "tuesday": 1,
+                "wednesday": 2,
+                "thursday": 3,
+                "friday": 4,
+                "saturday": 5,
+                "sunday": 6,
+            }
+            today_weekday = now.weekday()
+            target_weekday = days_map.get(time_header)
+            if target_weekday is not None:
+                delta_days = (today_weekday - target_weekday) % 7
+                date = (now - timedelta(days=delta_days)).date()
+
+        # Handle short date formats (e.g., "feb 6")
+        elif len(time_header.split()) == 2:
+            try:
+                # Parse the month and day (case-insensitive)
+                parsed_date = parser.parse(time_header)
+                # Assume the year is the current year
+                date = parsed_date.replace(year=now.year).date()
+            except ValueError:
+                print(f"Failed to parse short date format: {time_header}")
+                date = now.date()  # Default to today if parsing fails
+
+        # Handle full date formats (e.g., "nov 7, 2024")
+        elif len(time_header.split()) == 3:
+            try:
+                # Parse the full date (case-insensitive)
+                parsed_date = parser.parse(time_header)
+                date = parsed_date.date()
+            except ValueError:
+                print(f"Failed to parse full date format: {time_header}")
+                date = now.date()  # Default to today if parsing fails
+
+        # Default to today if no valid format is matched
+        else:
+            date = now.date()
+
+        # Normalize last_message_timestamp to lowercase for case-insensitive AM/PM handling
+        last_message_timestamp = last_message_timestamp.strip().lower()
+
+        # Parse the last message timestamp
+        time_format = "%I:%M %p"  # Example: "1:37 pm"
+        parsed_time = datetime.strptime(
+            last_message_timestamp, time_format).time()
+
+        # Combine date and time into a single datetime object
+        combined_datetime = datetime.combine(date, parsed_time)
+
+        # Convert to ISO format for consistency
+        return combined_datetime.isoformat()
+
+    except Exception as e:
+        print(f"Failed to combine time header and timestamp. Error: {e}")
         return None
