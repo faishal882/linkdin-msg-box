@@ -1,6 +1,6 @@
 import json
 from django.conf import settings
-
+from .models import CustomLabel  # Import the CustomLabel model
 import google.generativeai as genai
 
 # Use the GEMINI_API_KEY from Django settings
@@ -10,51 +10,79 @@ GEMINI_API_KEY = settings.GEMINI_API_KEY
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash-8b')
 
-# Classification labels
-LABELS = ["spam", "conversation", "greeting", "internship", "job", "other"]
 
-# Optimized classification prompt for batch processing
-BATCH_CLASSIFICATION_PROMPT = """you are my personal assistant handling my LinkedIn communication.
+def create_prompt(label_descriptions, formatted_messages):
+    prompt = f"""
+        You are my personal assistant handling my LinkedIn communication.
+        Analyze the following LinkedIn messages and classify each into exactly one of these categories based on their descriptions:
+        {label_descriptions}
+        If a message does not fit into any of the above categories, classify it as "other".
+        Return a JSON array where each object contains the "username" and "label" for the corresponding message.
+        Messages:
+        {formatted_messages}
+        Examples:
+        - "Hi, how are you doing?" => greeting
+        - "Please review my resume for the job opening" => job
+        - "Congratulations! You've won a free iPhone!" => spam
+        - "I'm interested in your internship program" => internship
+        - "Did you see the latest project updates?" => conversation
+        - Random link without context => spam
+        - Technical project details without request => other
+        - "Happy birthday!" => greeting
+        - "Can we schedule a call to discuss opportunities?" => job
+            Return only the JSON array, nothing else.
+    """
 
-Analyze the following LinkedIn messages and classify each into exactly one of these categories: {labels}.
-Return a JSON array where each object contains the "username" and "label" for the corresponding message.
+    return prompt
 
-Messages:
-{messages}
 
-Examples:
-- "Hi, how are you doing?" => greeting
-- "Please review my resume for the job opening" => job
-- "Congratulations! You've won a free iPhone!" => spam
-- "I'm interested in your internship program" => internship
-- "Did you see the latest project updates?" => conversation
-- Random link without context => spam
-- Technical project details without request => other
-- "Happy birthday!" => greeting
-- "Can we schedule a call to discuss opportunities?" => job
-
-Return only the JSON array, nothing else.
-"""
+def get_custom_labels_with_descriptions():
+    """
+    Fetch all custom labels and their descriptions from the database.
+    """
+    labels = CustomLabel.objects.values("name", "description")
+    return list(labels)
 
 
 def classify_messages(conversations):
     """
-    Classify LinkedIn messages into predefined categories.
-
-    Args:
-        conversations (list): List of conversation dictionaries with 'username' and 'messages'.
-
-    Returns:
-        list: List of conversations with an added 'label' key for each conversation.
+    Classify LinkedIn messages into predefined categories using label descriptions.
     """
+    # Fetch custom labels and their descriptions from the database
+    custom_labels = get_custom_labels_with_descriptions()
+
+    # If no custom labels exist, use default labels
+    if not custom_labels:
+        custom_labels = [
+            {"name": "spam", "description": "Unsolicited or irrelevant messages"},
+            {"name": "conversation", "description": "Ongoing discussions or dialogues"},
+            {"name": "greeting", "description": "Friendly greetings or introductions"},
+            {"name": "internship",
+                "description": "Messages related to internship opportunities"},
+            {"name": "job", "description": "Messages related to job offers or inquiries"},
+            {"name": "other", "description": "Messages that do not fit into any other category"},
+        ]
+
+    # Prepare label descriptions for the prompt
+    label_descriptions = "\n".join(
+        [f"- {label['name']}: {label['description']}" for label in custom_labels]
+    )
+
     # Extract the last message from each conversation for classification
-    messages_for_classification = [
-        {
-            "username": conv["username"],
-            "message": conv["messages"][-1] if conv["messages"] else ""
-        }
-        for conv in conversations
-    ]
+    messages_for_classification = []
+    for conv in conversations:
+        username = conv["username"]
+        messages = conv["messages"]
+
+        # If the last message is too short, use the previous message (if it exists)
+        last_message = messages[-1] if messages else ""
+        if len(last_message.split()) < 10 and len(messages) > 1:
+            last_message += messages[-2]  # Add both messages
+
+        messages_for_classification.append({
+            "username": username,
+            "message": last_message
+        })
 
     if messages_for_classification:
         try:
@@ -63,20 +91,17 @@ def classify_messages(conversations):
                 f"Username: {msg['username']}, Message: {msg['message']}"
                 for msg in messages_for_classification
             ]
-            prompt = BATCH_CLASSIFICATION_PROMPT.format(
-                labels=", ".join(LABELS),
-                messages="\n".join(formatted_messages)
-            )
 
+            # Construct the classification prompt with label descriptions
+            prompt = create_prompt(label_descriptions, formatted_messages)
+            print("PROMPT", prompt)
             response = model.generate_content(prompt).to_dict()
-
             # Parse the JSON response
             json_string = response["candidates"][0]["content"]["parts"][0]["text"]
             json_string = json_string.replace(
                 "```json", "").replace("```", "").strip()
             classified_results = json.loads(json_string)
-            print("Extracted JSON response:", classified_results)
-
+            print("CLASSIFIED_RES", classified_results)
         except json.JSONDecodeError as e:
             print(f"Failed to parse JSON: {e}")
             classified_results = [{"username": msg["username"], "label": "other"}
@@ -89,11 +114,8 @@ def classify_messages(conversations):
         # Merge classified results with conversations based on matching username
         username_to_label = {result["username"]: result["label"]
                              for result in classified_results}
-
         for conv in conversations:
             username = conv["username"]
             conv["label"] = username_to_label.get(username, "other")
-
-    print("classified: ", conversations)
 
     return conversations

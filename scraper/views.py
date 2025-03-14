@@ -1,6 +1,8 @@
 import json
 
 from django.http import JsonResponse
+from rest_framework.response import Response
+from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 
@@ -10,6 +12,8 @@ from .utils import (configure_browser,
                     navigate_to_messages,
                     scroll_to_load_all_conversations,
                     scrape_conversations)
+from .serializers import CustomLabelSerializer
+from .models import CustomLabel
 
 
 @api_view(['POST'])
@@ -77,3 +81,27 @@ def scrape_and_classify_messages(request, *args, **kwargs):
             return JsonResponse({"status": "error", "error": str(e)}, status=500)
 
     return JsonResponse({"status": "error", "error": "Invalid request method"}, status=400)
+
+
+@api_view(['POST'])
+def create_label(request):
+    """
+    Create a new custom label.
+    """
+    if request.method == 'POST':
+        serializer = CustomLabelSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def fetch_labels(request):
+    """
+    Fetch all custom labels.
+    """
+    if request.method == 'GET':
+        labels = CustomLabel.objects.all()
+        serializer = CustomLabelSerializer(labels, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
