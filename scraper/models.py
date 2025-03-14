@@ -14,3 +14,15 @@ class CustomLabel(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Conversation(models.Model):
+    thread_url = models.URLField(unique=True)
+    username = models.CharField(max_length=255)
+    profile_url = models.URLField(blank=True, null=True)  # Optional field
+    messages = models.JSONField(default=list)  # List of messages as JSON
+    last_message_timestamp = models.DateTimeField()  # Timestamp of the last message
+    label = models.CharField(max_length=255)  # Classification label
+
+    def __str__(self):
+        return f"{self.username} - {self.label}"

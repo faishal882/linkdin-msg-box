@@ -1,6 +1,6 @@
 import json
 from django.conf import settings
-from .models import CustomLabel  # Import the CustomLabel model
+from .models import CustomLabel, Conversation  # Import the CustomLabel model
 import google.generativeai as genai
 
 # Use the GEMINI_API_KEY from Django settings
@@ -118,4 +118,21 @@ def classify_messages(conversations):
             username = conv["username"]
             conv["label"] = username_to_label.get(username, "other")
 
-    return conversations
+        for conv in conversations:
+            # save conversation object to DB
+            try:
+                Conversation.objects.update_or_create(
+                    thread_url=conv["thread_url"],
+                    defaults={
+                        "username": conv["username"],
+                        "profile_url": conv.get("profile_url"),
+                        "messages": conv["messages"],
+                        "last_message_timestamp": conv["last_message_timestamp"],
+                        "label": conv["label"],
+                    }
+                )
+            except Exception as e:
+                print(f"Failed to save conversation to DB. Error: {e}")
+
+    print("Classified and saved conversations:")
+    return True

@@ -12,8 +12,8 @@ from .utils import (configure_browser,
                     navigate_to_messages,
                     scroll_to_load_all_conversations,
                     scrape_conversations)
-from .serializers import CustomLabelSerializer
-from .models import CustomLabel
+from .serializers import CustomLabelSerializer, ConversationSerializer
+from .models import CustomLabel, Conversation
 
 
 @api_view(['POST'])
@@ -71,11 +71,15 @@ def scrape_and_classify_messages(request, *args, **kwargs):
             print(f"Scraped {len(conversations)} conversations")
 
             # Classify the conversations
-            classified_conversations = classify_messages(conversations)
-            print(classified_conversations)
-
-            # Return the scraped and classified conversations
-            return JsonResponse({"status": "success", "conversations": classified_conversations})
+            classified_conversation = classify_messages(conversations)
+            if classified_conversation:
+                try:
+                    conversations = Conversation.objects.all()
+                    serializer = ConversationSerializer(
+                        conversations, many=True)
+                    return Response({"status": "success", "conversations": serializer.data})
+                except Exception as e:
+                    return JsonResponse({"status": "error", "error": str(e)}, status=500)
 
         except Exception as e:
             return JsonResponse({"status": "error", "error": str(e)}, status=500)
