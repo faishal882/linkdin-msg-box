@@ -1,6 +1,6 @@
 from .models import CustomLabel
 from rest_framework import serializers
-from .models import ScrapeSession, Conversation
+from .models import ScrapeSession, Conversation, SpamCounter
 
 
 class ScrapeSessionSerializer(serializers.ModelSerializer):
@@ -18,7 +18,6 @@ class CustomLabelSerializer(serializers.ModelSerializer):
 class ConversationSerializer(serializers.ModelSerializer):
     """
     Serializer for the Conversation model.
-    Converts Conversation instances into JSON format.
     """
     class Meta:
         model = Conversation
@@ -31,3 +30,12 @@ class ConversationSerializer(serializers.ModelSerializer):
             "last_message_timestamp",
             "label",
         ]
+
+
+class SpamCounterSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the SpamCounter model.
+    """
+    class Meta:
+        model = SpamCounter
+        fields = ["username", "profile_url", "spam_count"]

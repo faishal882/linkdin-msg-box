@@ -12,8 +12,8 @@ from .utils import (configure_browser,
                     navigate_to_messages,
                     scroll_to_load_all_conversations,
                     scrape_conversations)
-from .serializers import CustomLabelSerializer, ConversationSerializer
-from .models import CustomLabel, Conversation
+from .serializers import CustomLabelSerializer, ConversationSerializer, SpamCounterSerializer
+from .models import CustomLabel, Conversation, SpamCounter
 
 
 @api_view(['POST'])
@@ -92,11 +92,14 @@ def create_label(request):
     """
     Create a new custom label.
     """
+    print(request.data)
     if request.method == 'POST':
-        serializer = CustomLabelSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        if request.data["name"] != "" and request.data["description"] != "":
+            serializer = CustomLabelSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -109,3 +112,17 @@ def fetch_labels(request):
         labels = CustomLabel.objects.all()
         serializer = CustomLabelSerializer(labels, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def fetch_spam_counters(request):
+    """
+    Fetch spam counter data from the database.
+    """
+    try:
+        spam_counters = SpamCounter.objects.all()
+        serializer = SpamCounterSerializer(spam_counters, many=True)
+        return Response({"status": "success", "spam_counters": serializer.data})
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "error": str(e)}, status=500)

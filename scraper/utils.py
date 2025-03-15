@@ -115,21 +115,22 @@ def scrape_conversations(driver):
                 # Extract conversation details
                 conversation = extract_conversation_details(soup, thread_url)
                 if conversation:
-                    conv_thread = Conversation.objects.get(
-                        thread_url=thread_url)
-                    print(
-                        f"db: {conv_thread.last_message_timestamp}, user: {conv_thread.username},conv: {conversation['last_message_timestamp']}")
-                    db_timestamp = conv_thread.last_message_timestamp
-                    scraped_timestamp = datetime.fromisoformat(
-                        conversation["last_message_timestamp"])
-                    # Convert to timezone-aware (UTC)
-                    scraped_timestamp = make_aware(scraped_timestamp)
-                    scraped_timestamp = truncate_microseconds(
-                        scraped_timestamp)
+                    try:
+                        conv_thread = Conversation.objects.get(
+                            thread_url=thread_url)
+                        db_timestamp = conv_thread.last_message_timestamp
+                        scraped_timestamp = datetime.fromisoformat(
+                            conversation["last_message_timestamp"])
+                        # Convert to timezone-aware (UTC)
+                        scraped_timestamp = make_aware(scraped_timestamp)
+                        scraped_timestamp = truncate_microseconds(
+                            scraped_timestamp)
 
-                    if db_timestamp == scraped_timestamp:
-                        print("Latest Conversation in DB")
-                        return conversations
+                        if db_timestamp == scraped_timestamp:
+                            print("Latest Conversation in DB")
+                            return conversations
+                    except:
+                        print("conversation object doesnot exist")
 
                     conversations.append(conversation)
                     print(

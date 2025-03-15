@@ -1,6 +1,6 @@
 import json
 from django.conf import settings
-from .models import CustomLabel, Conversation  # Import the CustomLabel model
+from .models import CustomLabel, Conversation, SpamCounter
 import google.generativeai as genai
 
 # Use the GEMINI_API_KEY from Django settings
@@ -119,6 +119,20 @@ def classify_messages(conversations):
             conv["label"] = username_to_label.get(username, "other")
 
         for conv in conversations:
+            # check for spammers
+            if conv["label"] == "spam":
+                try:
+                    spam_counter, created = SpamCounter.objects.get_or_create(
+                        profile_url=conv.get("profile_url"),
+                        defaults={
+                            "username": conv["username"], "spam_count": 0}
+                    )
+                    spam_counter.spam_count += 1
+                    spam_counter.save()
+                except Exception as e:
+                    print(
+                        f"Failed to update spam count for {username}. Error: {e}")
+
             # save conversation object to DB
             try:
                 Conversation.objects.update_or_create(

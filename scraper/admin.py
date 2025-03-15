@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CustomLabel, Conversation
+from .models import CustomLabel, Conversation, SpamCounter
 
 
 @admin.register(CustomLabel)
@@ -9,4 +9,9 @@ class CustomLabelAdmin(admin.ModelAdmin):
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
+    pass
+
+
+@admin.register(SpamCounter)
+class SpamCounterAdmin(admin.ModelAdmin):
     pass
