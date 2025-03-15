@@ -4,11 +4,7 @@ from .models import CustomLabel, Conversation, SpamCounter
 import google.generativeai as genai
 
 # Use the GEMINI_API_KEY from Django settings
-GEMINI_API_KEY = settings.GEMINI_API_KEY
-
-# Configure Gemini API
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash-8b')
+# GEMINI_API_KEY = settings.GEMINI_API_KEY
 
 
 def create_prompt(label_descriptions, formatted_messages):
@@ -44,10 +40,14 @@ def get_custom_labels_with_descriptions():
     return list(labels)
 
 
-def classify_messages(conversations):
+def classify_messages(conversations, api_key):
     """
     Classify LinkedIn messages into predefined categories using label descriptions.
     """
+    # Configure Gemini API
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash-8b')
+
     # Fetch custom labels and their descriptions from the database
     custom_labels = get_custom_labels_with_descriptions()
 
@@ -108,8 +108,7 @@ def classify_messages(conversations):
                                   for msg in messages_for_classification]
         except Exception as e:
             print(f"Batch classification error: {e}")
-            classified_results = [{"username": msg["username"], "label": "other"}
-                                  for msg in messages_for_classification]
+            return (False, e)
 
         # Merge classified results with conversations based on matching username
         username_to_label = {result["username"]: result["label"]

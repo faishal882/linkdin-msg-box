@@ -92,15 +92,21 @@ def scroll_to_load_all_conversations(driver):
         print(f"Failed to scroll and load conversations. Error: {e}")
 
 
-def scrape_conversations(driver):
+def scrape_conversations(driver, num_conversation=20):
     """Scrape all conversations and return a list of conversations."""
     conversations = []
     try:
         # Find all conversation elements
         conversation_elements = driver.find_elements(
             # Limit to 10 conversations
-            By.CSS_SELECTOR, ".msg-conversation-listitem")[:10]
-        for index, element in enumerate(conversation_elements):
+            By.CSS_SELECTOR, ".msg-conversation-listitem")
+        # Number of conversation thread to scrap
+        total_conversations = len(conversation_elements)
+        print(f"Total conversations found: {total_conversations}")
+        if total_conversations <= num_conversation:
+            num_conversation = total_conversations
+
+        for index, element in enumerate(conversation_elements[:num_conversation]):
             try:
                 # Click on the conversation to load the thread
                 element.click()

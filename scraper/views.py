@@ -41,10 +41,20 @@ def scrape_and_classify_messages(request, *args, **kwargs):
             # Parse JSON data from the request body
             data = json.loads(request.body)
             cookies = data.get("cookies", [])
+            api_key = data.get("api_key")
+            num_conversations = data.get("num_conversations")
 
             # Validate cookies
             if not cookies:
                 return JsonResponse({"status": "error", "error": "No cookies provided"}, status=400)
+
+            # Validate cookies
+            if not api_key:
+                return JsonResponse({"status": "error", "error": "No Api Key provided"}, status=400)
+
+            # Validate cookies
+            if not num_conversations:
+                return JsonResponse({"status": "error", "error": "No of conversations to scrap not provided"}, status=400)
 
             # Configure and start the browser
             driver = configure_browser()
@@ -61,7 +71,7 @@ def scrape_and_classify_messages(request, *args, **kwargs):
             scroll_to_load_all_conversations(driver)
 
             # Scrape all conversations
-            conversations = scrape_conversations(driver)
+            conversations = scrape_conversations(driver, num_conversations)
 
             print("Scraping complete: ", conversations)
 
@@ -71,8 +81,9 @@ def scrape_and_classify_messages(request, *args, **kwargs):
             print(f"Scraped {len(conversations)} conversations")
 
             # Classify the conversations
-            classified_conversation = classify_messages(conversations)
-            if classified_conversation:
+            classified_conversation = classify_messages(conversations, api_key)
+
+            if classified_conversation is True:
                 try:
                     conversations = Conversation.objects.all()
                     serializer = ConversationSerializer(
@@ -80,6 +91,9 @@ def scrape_and_classify_messages(request, *args, **kwargs):
                     return Response({"status": "success", "conversations": serializer.data})
                 except Exception as e:
                     return JsonResponse({"status": "error", "error": str(e)}, status=500)
+            else:
+                success, error = classified_conversation
+                return JsonResponse({"status": "error", "error": str(error)}, status=500)
 
         except Exception as e:
             return JsonResponse({"status": "error", "error": str(e)}, status=500)
