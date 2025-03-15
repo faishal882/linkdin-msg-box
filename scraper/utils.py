@@ -1,6 +1,7 @@
 from dateutil import parser
 import time
 from datetime import datetime, timedelta
+from django.utils.timezone import make_aware
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -8,6 +9,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+
+from .models import Conversation
 
 
 def configure_browser():
@@ -112,6 +115,22 @@ def scrape_conversations(driver):
                 # Extract conversation details
                 conversation = extract_conversation_details(soup, thread_url)
                 if conversation:
+                    conv_thread = Conversation.objects.get(
+                        thread_url=thread_url)
+                    print(
+                        f"db: {conv_thread.last_message_timestamp}, user: {conv_thread.username},conv: {conversation['last_message_timestamp']}")
+                    db_timestamp = conv_thread.last_message_timestamp
+                    scraped_timestamp = datetime.fromisoformat(
+                        conversation["last_message_timestamp"])
+                    # Convert to timezone-aware (UTC)
+                    scraped_timestamp = make_aware(scraped_timestamp)
+                    scraped_timestamp = truncate_microseconds(
+                        scraped_timestamp)
+
+                    if db_timestamp == scraped_timestamp:
+                        print("Latest Conversation in DB")
+                        return conversations
+
                     conversations.append(conversation)
                     print(
                         f"Scraped conversation {index + 1}/{len(conversation_elements)}: {conversation['username']}")
@@ -149,13 +168,11 @@ def extract_conversation_details(soup, thread_url):
             time_header_elements = soup.find_all(
                 "time", class_="msg-s-message-list__time-heading")
             time_header = time_header_elements[-1].text.strip()
-            print("TH>>", time_header)
             # time stamp
             last_message_timestamp_elements = soup.find_all(
                 "time", class_="msg-s-message-group__timestamp")
             last_message_timestamp = last_message_timestamp_elements[-1].text.strip(
             )
-            print("S>>", last_message_timestamp)
 
         except:
             time_header = None
@@ -266,3 +283,8 @@ def combine_time_header_and_timestamp(time_header, last_message_timestamp):
     except Exception as e:
         print(f"Failed to combine time header and timestamp. Error: {e}")
         return None
+
+
+def truncate_microseconds(dt):
+    """Truncate microseconds from a datetime object."""
+    return dt.replace(microsecond=0)
