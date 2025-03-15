@@ -295,3 +295,20 @@ def combine_time_header_and_timestamp(time_header, last_message_timestamp):
 def truncate_microseconds(dt):
     """Truncate microseconds from a datetime object."""
     return dt.replace(microsecond=0)
+
+
+def reclassify_all_conversations(api_key):
+    """
+    Fetch all conversations from the database, reclassify them, and update their labels.
+    """
+    from .classify import classify_messages
+    try:
+        conversations = list(Conversation.objects.all().values(
+            "thread_url", "username", "profile_url", "messages", "last_message_timestamp"
+        ))
+
+        if conversations:
+            classified_conversations = classify_messages(
+                conversations, api_key)
+    except Exception as e:
+        print(f"Failed to reclassify conversations. Error: {e}")

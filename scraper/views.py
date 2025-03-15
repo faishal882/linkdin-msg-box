@@ -11,7 +11,7 @@ from .utils import (configure_browser,
                     navigate_to_linkedin_and_set_cookies,
                     navigate_to_messages,
                     scroll_to_load_all_conversations,
-                    scrape_conversations)
+                    scrape_conversations, reclassify_all_conversations)
 from .serializers import CustomLabelSerializer, ConversationSerializer, SpamCounterSerializer
 from .models import CustomLabel, Conversation, SpamCounter
 
@@ -108,10 +108,16 @@ def create_label(request):
     """
     print(request.data)
     if request.method == 'POST':
-        if request.data["name"] != "" and request.data["description"] != "":
+        api_key = request.data["api_key"]
+        if request.data["name"] != "" and request.data["description"] != "" and api_key:
             serializer = CustomLabelSerializer(data=request.data)
             if serializer.is_valid():
                 serializer.save()
+                try:
+                    reclassify_all_conversations(api_key)
+                except:
+                    return JsonResponse({"status": "error", "error": "failed to reclassify the messages"}, status=400)
+
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

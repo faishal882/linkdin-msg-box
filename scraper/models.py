@@ -45,27 +45,28 @@ class SpamCounter(models.Model):
 
 
 # Signal to trigger reclassification when a CustomLabel is updated
-@receiver(post_save, sender=CustomLabel)
-def reclassify_conversations_on_label_update(sender, instance, **kwargs):
-    """
-    Trigger reclassification of conversations when a CustomLabel is updated.
-    """
-    print(
-        f"CustomLabel updated: {instance.name}. Reclassifying conversations...")
-    reclassify_all_conversations()
+# @receiver(post_save, sender=CustomLabel)
+# def reclassify_conversations_on_label_update(sender, instance, **kwargs):
+#     """
+#     Trigger reclassification of conversations when a CustomLabel is updated.
+#     """
+#     print(
+#         f"CustomLabel updated: {instance.name}. Reclassifying conversations...")
+#     reclassify_all_conversations()
 
 
-def reclassify_all_conversations():
-    """
-    Fetch all conversations from the database, reclassify them, and update their labels.
-    """
-    from .classify import classify_messages
-    try:
-        conversations = list(Conversation.objects.all().values(
-            "thread_url", "username", "profile_url", "messages", "last_message_timestamp"
-        ))
+# def reclassify_all_conversations():
+#     """
+#     Fetch all conversations from the database, reclassify them, and update their labels.
+#     """
+#     from .classify import classify_messages
+#     try:
+#         conversations = list(Conversation.objects.all().values(
+#             "thread_url", "username", "profile_url", "messages", "last_message_timestamp"
+#         ))
 
-        if conversations:
-            classified_conversations = classify_messages(conversations)
-    except Exception as e:
-        print(f"Failed to reclassify conversations. Error: {e}")
+#         if conversations:
+#             classified_conversations = classify_messages(
+#                 conversations, GEMINI_API_KEY)
+#     except Exception as e:
+#         print(f"Failed to reclassify conversations. Error: {e}")
